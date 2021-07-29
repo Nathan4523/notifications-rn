@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Constants from 'expo-constants';
-import { Button, Platform, Text, View } from 'react-native';
+import { Alert, Button, Platform, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 //firebase
@@ -28,19 +30,46 @@ Notifications.setNotificationHandler({
   }),
 });
 
+const BACKGROUND_FETCH_TASK = 'background-fetch';
+
+TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+  const now = Date.now();
+
+  console.log(`Got background fetch call at date: ${new Date(now).toISOString()}`);
+  schedulePushNotification("Executei em segundo plano (2)", 'teste', { data: 'goes here' });
+
+  // Be sure to return the successful result type!
+  return BackgroundFetch.Result.NewData;
+});
+
+async function registerBackgroundFetchAsync() {
+  return BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+    minimumInterval: 60 * 1, // 1 minutes
+    // minimumInterval: 60 * 15, // 15 minutes
+    stopOnTerminate: false, // android only,
+    startOnBoot: true, // android only
+  });
+}
+
+async function unregisterBackgroundFetchAsync() {
+  return BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK);
+}
+
 export default function App() {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
   const [notification, setNotification] = useState<any>(false);
+  const [isRegistered, setIsRegistered] = useState<boolean>(false);
+  const [status, setStatus] = useState<BackgroundFetch.Status | null>(null);
   const notificationListener = useRef<any>();
   const responseListener = useRef<any>();
 
   useEffect(() => {
-    firebase.auth().signInAnonymously().then(async () => {
-      //do something
-      console.log('||===FIREBASE LOGGED===||');
-    }).catch((error) => {
-      console.log(error.message);
-    });
+    // firebase.auth().signInAnonymously().then(async () => {
+    //   //do something
+    //   console.log('||===FIREBASE LOGGED===||');
+    // }).catch((error) => {
+    //   console.log(error.message);
+    // });
 
     registerForPushNotificationsAsync().then((token) => setExpoPushToken(token));
 
@@ -55,7 +84,7 @@ export default function App() {
       console.log(response);
     });
 
-    executeCustom();
+    // executeCustom();
 
     return () => {
       Notifications.removeNotificationSubscription(notificationListener.current);
@@ -71,6 +100,10 @@ export default function App() {
       const data = snapshot.val();
       const idNotification = await AsyncStorage.getItem('@appNoti:started');
 
+      console.log(idNotification);
+      console.log(JSON.parse(idNotification || '') === snapshot.key);
+      console.log(data.type);
+
       if (idNotification != null) {
         if (JSON.parse(idNotification) === snapshot.key) return false;
 
@@ -80,6 +113,7 @@ export default function App() {
 
         if (data.type == 'message') title = 'Você tem um nova messange!';
 
+        Alert.alert('teste', data.type)
         if (data.type == 'message' || data.type == 'room') {
           schedulePushNotification(title, data.message, { data: 'goes here' });
         }
@@ -88,6 +122,25 @@ export default function App() {
       await AsyncStorage.setItem("@appNoti:started", JSON.stringify(snapshot.key));
     });
   }, []);
+
+  const checkStatusAsync = async () => {
+    const status = await BackgroundFetch.getStatusAsync();
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
+    setStatus(status);
+    setIsRegistered(isRegistered);
+    console.log("sei la mano");
+  };
+
+  const toggleFetchTask = async () => {
+    if (isRegistered) {
+      console.log('registrado')
+      await unregisterBackgroundFetchAsync();
+    } else {
+      await registerBackgroundFetchAsync();
+    }
+
+    checkStatusAsync();
+  };
 
   return (
     <View
@@ -113,6 +166,7 @@ export default function App() {
         onPress={async () => {
           const notificationsStarted = await AsyncStorage.getItem('@appNoti:started');
           console.log(notificationsStarted);
+          Alert.alert('token', String(notificationsStarted));
         }}
       />
       <Button
@@ -121,6 +175,25 @@ export default function App() {
           await AsyncStorage.removeItem('@appNoti:started');
         }}
       />
+
+      <View>
+        <Text>
+          Background fetch status:{' '}
+          <Text>{status ? BackgroundFetch.Status[status] : null}</Text>
+        </Text>
+        <Text>
+          Background fetch task name:{' '}
+          <Text>
+            {isRegistered ? BACKGROUND_FETCH_TASK : 'Not registered yet!'}
+          </Text>
+        </Text>
+      </View>
+      <View></View>
+      <Button
+        title={isRegistered ? 'Unregister BackgroundFetch task' : 'Register BackgroundFetch task'}
+        onPress={toggleFetchTask}
+      />
+
     </View>
   );
 }
