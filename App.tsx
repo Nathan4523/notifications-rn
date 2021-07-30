@@ -17,6 +17,7 @@ import { useCallback } from 'react';
  * here
  */
 
+
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseSecrets);
 }
