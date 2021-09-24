@@ -15,8 +15,8 @@ import { useCallback } from 'react';
 /**
  * Insert the secrets firebase
  * here
+ * GOLEAD HOMOL FIREBASE
  */
-
 
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseSecrets);
